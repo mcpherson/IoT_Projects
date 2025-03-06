@@ -26,7 +26,8 @@ const int GREENLEDPIN = D12;
 const int BLUELEDPIN = D13;
 const int ENCBTNPIN = D14;
 const int PSHBTNPIN = D19;
-const int OLED_RESET=-1;
+const int OLED_RESET = -1;
+const int HUERANGE = 65350;
 
 Adafruit_SSD1306 display(OLED_RESET);
 Encoder myEncoder(D8, D9);
@@ -36,12 +37,12 @@ Adafruit_NeoPixel pixel(PIXELCOUNT, SPI1, WS2812B);
 
 int tableNum;
 int gameMode = 0;
-int bulbColor;
 
 int selectTable();
 void startGame(int tableNum, int gameMode);
 void displayInstructions(int gameMode);
-float guessHue();
+void displayAccuracy(float _accuracy);
+float guessHue(int bulbColor);
 
 
 void setup() {
@@ -105,17 +106,24 @@ int selectTable() {
 void startGame(int tableNum, int gameMode) {
   int _tableNum = tableNum;
   int _gameMode = gameMode;
-  int _bulbNum = _tableNum + 1;
-  
-  // Turn off all hue bulbs except active table. 
   // Set active bulb to random hue. 
-  bulbColor = random(0, 65353);
-  for (int i=1; i<6; i++) {  // hues indexed from 1, yay
+  int _bulbColor = random(0, HUERANGE);
+  int _bulbNum = _tableNum + 1; // hue bulbs indexed from 1
+  float _accuracy;
+  
+  // Turn off all hue bulbs and wemos except active table. 
+  for (int i=1; i<6; i++) {  
     delay(100);
-    if (i == _bulbNum) {
-      setHue(_bulbNum, true, bulbColor, 255, 255);
+    if (i == _tableNum) {
+      wemoWrite(_tableNum, HIGH);
+      setHue(i, false);
+    }
+    else if (i == _bulbNum) {
+      wemoWrite(i, LOW);
+      setHue(_bulbNum, true, _bulbColor, 255, 255);
     }
     else {
+      wemoWrite(i, LOW);
       setHue(i, false);
     }
   }
@@ -125,7 +133,9 @@ void startGame(int tableNum, int gameMode) {
   displayInstructions(_gameMode);
   switch (_gameMode) {
     case 0:
-      guessHue();
+      _accuracy = guessHue(_bulbColor);
+      delay(100);
+      displayAccuracy(_accuracy);
       break;
     default:
       break;
@@ -152,11 +162,28 @@ void displayInstructions(int gameMode) {
     }
     display.display();
   }
+  setHue(tableNum + 1, true, random(0, HUERANGE), 255, 255);
 }
 
-float guessHue() {
+void displayAccuracy(float accuracy) {
+  display.clearDisplay();
+  while (!encButton.isClicked()) {
+    if (accuracy > 0.9) {
+      display.setTextSize(2);
+      display.setCursor(12,0);
+      display.printf("ACCURACY:\n");
+      display.setCursor(36,40);
+      display.printf("%0.1f%%\n", accuracy);
+      display.display();
+    }
+  }
+}
+
+float guessHue(int bulbColor) {
   int _pos;
   int _guess;
+  int _bulbColor = bulbColor; // is this needed?
+  int _delta;
   float _accuracy;
   // guessing hue via encoder
   while (!encButton.isClicked()) {
@@ -164,15 +191,34 @@ float guessHue() {
     _guess = _pos * 50;
     // bound hue values
     if (_guess < 0) {
-      myEncoder.write(round(65350 / 50));
+      myEncoder.write(HUERANGE / 50); 
     }
-    if (_guess > 65353) {
+    if (_guess > HUERANGE) {
       myEncoder.write(0);
     }
-    Serial.printf("guess: %i\n", _guess);
-    setHue(tableNum + 1, true, _guess, 255, 255);
+    // display guess on OLED
+    display.clearDisplay();
+    display.setCursor(34,0);
+    display.printf("CURRENT HUE:\n");
+    display.setCursor(50,30);
+    display.printf("%i\n", _guess);
+    display.display();
+
+    setHue((tableNum + 1), true, _guess, 255, 255);
     delay(100);
   }
   // compare values and calculate accuracy
-  return _accuracy;
+  // https://stackoverflow.com/a/36072199
+  _delta = (_guess + HUERANGE - _bulbColor) % HUERANGE;
+  if (_delta <= HUERANGE / 2) { 
+    _accuracy = ((float)HUERANGE - (float)_delta) / (float)HUERANGE;
+  }
+  else {
+    _accuracy = ((float)HUERANGE - ((float)HUERANGE - (float)_delta)) / (float)HUERANGE;
+  }
+  // convert from 0.5 - 1.0 range to 0.0 - 1.0
+  // https://stackoverflow.com/questions/929103/convert-a-number-range-to-another-range-maintaining-ratio/929107#929107
+  float _newAccuracy = ((_accuracy - 0.5) / 0.5);
+  Serial.printf("delta: %i, accuracy: %0.3f, converted: %0.3f\n", _delta, _accuracy, _newAccuracy);
+  return _newAccuracy * 100; // convert to percentage
 }
