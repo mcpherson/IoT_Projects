@@ -15,6 +15,7 @@
 #include "wemo.h"
 #include "IoTTimer.h"
 #include "hsv.h"
+#include "Wire.h"
 
 SYSTEM_MODE(MANUAL);
 // SYSTEM_THREAD(ENABLED);
@@ -26,6 +27,7 @@ const int GREENLEDPIN = D12;
 const int BLUELEDPIN = D13;
 const int ENCBTNPIN = D14;
 const int PSHBTNPIN = D19;
+const int SERVOPIN = D16;
 const int OLED_RESET = -1;
 const int HUERANGE = 65350;
 
@@ -34,9 +36,11 @@ Encoder myEncoder(D8, D9);
 Button encButton(ENCBTNPIN);  // encoder button
 Button myButton(PSHBTNPIN);   // standalone button
 Adafruit_NeoPixel pixel(PIXELCOUNT, SPI1, WS2812B);
+Servo accuracyGauge;
 
 int tableNum;
 int gameMode = 0;
+int servoStartPosition = 0;
 
 int selectTable();
 void startGame(int tableNum, int gameMode);
@@ -70,6 +74,9 @@ void setup() {
   
   pixel.begin();
   pixel.setBrightness(100);
+
+  accuracyGauge.attach(SERVOPIN);
+  accuracyGauge.write(servoStartPosition);
   
 }
 
@@ -162,7 +169,11 @@ void displayInstructions(int gameMode) {
     }
     display.display();
   }
-  setHue(tableNum + 1, true, random(0, HUERANGE), 255, 255);
+  // pick random hue to start guessing from
+  // int currHue = getHue(tableNum + 1);
+  int nextHue = random(0, HUERANGE);
+ 
+  setHue(tableNum + 1, true, nextHue, 255, 255);
 }
 
 void displayAccuracy(float accuracy) {
@@ -175,6 +186,7 @@ void displayAccuracy(float accuracy) {
       display.setCursor(36,40);
       display.printf("%0.1f%%\n", accuracy);
       display.display();
+      accuracyGauge.write(round(accuracy));
     }
   }
 }
