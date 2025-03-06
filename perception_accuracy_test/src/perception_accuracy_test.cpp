@@ -22,9 +22,9 @@ SYSTEM_MODE(MANUAL);
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
 const int PIXELCOUNT = 16;
-const int REDLEDPIN = D11;
-const int GREENLEDPIN = D12;
-const int BLUELEDPIN = D13;
+const int BLUE_LEDPIN = D11;
+const int RED_LEDPIN = D12;
+const int GREEN_LEDPIN = D13;
 const int ENCBTNPIN = D14;
 const int PSHBTNPIN = D19;
 const int SERVOPIN = D16;
@@ -53,9 +53,9 @@ void setup() {
   Serial.begin(4900);
   waitFor(Serial.isConnected, 5000);
 
-  pinMode(REDLEDPIN, OUTPUT);
-  pinMode(GREENLEDPIN, OUTPUT);
-  pinMode(BLUELEDPIN, OUTPUT);
+  pinMode(BLUE_LEDPIN, OUTPUT);
+  pinMode(RED_LEDPIN, OUTPUT);
+  pinMode(GREEN_LEDPIN, OUTPUT);
 
   WiFi.on();
   WiFi.clearCredentials();
@@ -81,7 +81,7 @@ void setup() {
 }
 
 void loop() {
-  // digitalWrite(REDLEDPIN, LOW);
+  // digitalWrite(BLUE_LEDPIN, LOW);
   tableNum = selectTable(); // working
   startGame(tableNum, gameMode);
 
@@ -90,6 +90,9 @@ void loop() {
 
 int selectTable() {
   int tableNum = 0;
+  digitalWrite(RED_LEDPIN, LOW); 
+  digitalWrite(GREEN_LEDPIN, LOW); 
+  digitalWrite(BLUE_LEDPIN, HIGH);   
   while (!encButton.isClicked()) {
     display.clearDisplay();
     // guaranteed value 0-4
@@ -152,6 +155,9 @@ void startGame(int tableNum, int gameMode) {
 
 void displayInstructions(int gameMode) {
   int _gameMode = gameMode;
+  digitalWrite(RED_LEDPIN, HIGH); 
+  digitalWrite(GREEN_LEDPIN, LOW); 
+  digitalWrite(BLUE_LEDPIN, LOW);   
   while (!encButton.isClicked()){
     switch (_gameMode) {
       case 0:   // guess hue bulb color
@@ -197,6 +203,9 @@ float guessHue(int bulbColor) {
   int _bulbColor = bulbColor; // is this needed?
   int _delta;
   float _accuracy;
+  digitalWrite(RED_LEDPIN, LOW); 
+  digitalWrite(GREEN_LEDPIN, HIGH); 
+  digitalWrite(BLUE_LEDPIN, LOW);   
   // guessing hue via encoder
   while (!encButton.isClicked()) {
     _pos = myEncoder.read();
