@@ -184,15 +184,35 @@ void displayInstructions(int gameMode) {
 
 void displayAccuracy(float accuracy) {
   display.clearDisplay();
+  accuracyGauge.write(round(accuracy));
   while (!encButton.isClicked()) {
-    if (accuracy > 0.9) {
+    for (int i=0; i<3; i++) {
+      if (i == 0) {
+        digitalWrite(RED_LEDPIN, HIGH); 
+        digitalWrite(GREEN_LEDPIN, LOW); 
+        digitalWrite(BLUE_LEDPIN, LOW);
+        delay(100);
+      }
+      else if (i == 1) {
+        digitalWrite(RED_LEDPIN, LOW); 
+        digitalWrite(GREEN_LEDPIN, HIGH); 
+        digitalWrite(BLUE_LEDPIN, LOW);
+        delay(100);
+      }
+      else {
+        digitalWrite(RED_LEDPIN, LOW); 
+        digitalWrite(GREEN_LEDPIN, LOW); 
+        digitalWrite(BLUE_LEDPIN, HIGH);
+        delay(100);
+      }
+    }
+    if (accuracy > 0.9) {  //FIX
       display.setTextSize(2);
       display.setCursor(12,0);
       display.printf("ACCURACY:\n");
       display.setCursor(36,40);
       display.printf("%0.1f%%\n", accuracy);
       display.display();
-      accuracyGauge.write(round(accuracy));
     }
   }
 }
