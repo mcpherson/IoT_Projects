@@ -26,8 +26,7 @@ const int PIXELCOUNT = 8;
 const int BLUE_LEDPIN = D11;
 const int RED_LEDPIN = D12;
 const int GREEN_LEDPIN = D13;
-const int ENCBTNPIN = D14;
-const int PSHBTNPIN = D19;
+const int BTNPIN = D14;
 const int SERVOPIN = D16;
 const int OLED_RESET = -1;
 const int HUERANGE = 65350;
@@ -36,8 +35,7 @@ const byte DEGREESYMBOL = 248;
 
 Adafruit_SSD1306 display(OLED_RESET);
 Encoder myEncoder(D8, D9);
-Button encButton(ENCBTNPIN);  // encoder button
-Button pshButton(PSHBTNPIN);   // standalone button
+Button myButton(BTNPIN);
 Adafruit_NeoPixel pixel(PIXELCOUNT, SPI1, WS2812B);
 Servo accuracyGauge;
 Adafruit_BME280 bme;
@@ -94,12 +92,9 @@ void setup() {
 // MAIN LOOP
 void loop() {
   accuracyGauge.write(servoStartPosition);
-  // myEncoder.write(0);
   tableNum = selectTable(tableNum);
   gameMode = selectGameMode(gameMode);
   startGame(tableNum, gameMode);
-
-  // delay(2147000000);
 }
 
 int selectTable(int tableNum) {
@@ -108,8 +103,8 @@ int selectTable(int tableNum) {
   digitalWrite(RED_LEDPIN, HIGH); 
   digitalWrite(GREEN_LEDPIN, HIGH); 
   digitalWrite(BLUE_LEDPIN, LOW);   
-  while (!encButton.isClicked()) {
-    tableNum = abs((myEncoder.read() / 4) % 5); 
+  while (!myButton.isClicked()) {
+    tableNum = abs(((myEncoder.read() / 4) + 4) % 5); 
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -119,8 +114,8 @@ int selectTable(int tableNum) {
     display.printf("SELECT YOUR TABLE.\n");
     display.setCursor(36,32);
     display.printf("Table #%i\n", tableNum);
-    display.setCursor(11,52);
-    display.printf("PUSH KNOB TO BEGIN.\n");
+    display.setCursor(5,52);
+    display.printf("PUSH BUTTON TO BEGIN.\n");
     display.display();
   }
   return tableNum;
@@ -128,8 +123,8 @@ int selectTable(int tableNum) {
 
 int selectGameMode(int gameMode) {
   myEncoder.write(gameMode * 4);  
-  while (!encButton.isClicked()) {
-    gameMode = abs((myEncoder.read() / 4) % 4);
+  while (!myButton.isClicked()) {
+    gameMode = abs(((myEncoder.read() / 4) + 4) % 4);
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -137,8 +132,8 @@ int selectGameMode(int gameMode) {
     display.printf("TURN RIGHT KNOB TO\n");
     display.setCursor(15,13);
     display.printf("SELECT GAME MODE.\n");
-    display.setCursor(11,52);
-    display.printf("PUSH KNOB TO BEGIN.\n");
+    display.setCursor(5,52);
+    display.printf("PUSH BUTTON TO BEGIN.\n");
     switch (gameMode) {
       case 0: 
         display.setCursor(33,32);
@@ -149,8 +144,8 @@ int selectGameMode(int gameMode) {
         display.printf("Line Midpoint");
         break;
       case 2:
-        display.setCursor(30,32);
-        display.printf("Guess Temp\n");
+        display.setCursor(14,32);
+        display.printf("Guess Temperature\n");
         break;
       case 3:
         display.setCursor(33,32);
@@ -222,7 +217,7 @@ void displayInstructions(int gameMode) {
   digitalWrite(RED_LEDPIN, HIGH); 
   digitalWrite(GREEN_LEDPIN, LOW); 
   digitalWrite(BLUE_LEDPIN, LOW);   
-  while (!encButton.isClicked()){
+  while (!myButton.isClicked()){
     switch (_gameMode) {
       case 0:   // guess hue
         display.setCursor(14,0);
@@ -231,16 +226,16 @@ void displayInstructions(int gameMode) {
         display.printf("HUE BULB COLOR BY\n");
         display.setCursor(9,20);
         display.printf("TURNING RIGHT KNOB.\n");
-        display.setCursor(9,40);
-        display.printf("PUSH KNOB TO BEGIN.\n");
+        display.setCursor(0,40);
+        display.printf("PUSH BUTTON TO BEGIN.\n");
         break;
       case 1:   // line midpoint
         display.setCursor(8,0);
         display.printf("GUESS LINE MIDPOINT\n");
         display.setCursor(14,10);
         display.printf("USING RIGHT KNOB.\n");
-        display.setCursor(9,20);
-        display.printf("PUSH KNOB TO BEGIN.\n");
+        display.setCursor(0,20);
+        display.printf("PUSH BUTTON TO BEGIN.\n");
         display.setCursor(6,40);
         display.printf("PUSH AGAIN TO GUESS.\n");
         break;
@@ -249,8 +244,8 @@ void displayInstructions(int gameMode) {
         display.printf("GUESS ROOM TEMP (%cF)\n", DEGREESYMBOL);
         display.setCursor(14,10);
         display.printf("USING RIGHT KNOB.\n");
-        display.setCursor(9,20);
-        display.printf("PUSH KNOB TO BEGIN.\n");
+        display.setCursor(0,20);
+        display.printf("PUSH BUTTON TO BEGIN.\n");
         display.setCursor(6,40);
         display.printf("PUSH AGAIN TO GUESS.\n");
         break;
@@ -260,7 +255,7 @@ void displayInstructions(int gameMode) {
         display.printf("WHOA DUDE!\n");
         display.setTextSize(1);
         display.setCursor(20,40);
-        display.printf("PUSH RIGHT KNOB\n");
+        display.printf("PUSH THE BUTTON\n");
         display.setCursor(9,50);
         display.printf("TO END THE MADNESS.\n");
         display.display();
@@ -281,10 +276,10 @@ void displayAccuracy(float accuracy) {
   display.setCursor(36,26);
   display.printf("%0.1f%%\n", accuracy);
   display.setTextSize(1);
-  display.setCursor(3,54);
-  display.printf("PUSH KNOB TO PROCEED.\n");
+  display.setCursor(14,54);
+  display.printf("PUSH BUTTON TO END\n");
   display.display();
-  while (!encButton.isClicked()) {
+  while (!myButton.isClicked()) {
     // lightshow
     if (accuracy > 95.0) {
       // rainbow knob
@@ -292,7 +287,7 @@ void displayAccuracy(float accuracy) {
         IoTTimer timer;
         timer.startTimer(200);
         while (!timer.isTimerReady()) {
-          if (encButton.isClicked()) {
+          if (myButton.isClicked()) {
             return;
           }
           switch (i) {
@@ -338,7 +333,7 @@ void lightshow() { // automatic mode
     delay(100);
   }
   // lightshow
-  while(!encButton.isClicked()) {
+  while(!myButton.isClicked()) {
     for (int i=0; i<6; i++) {
       IoTTimer timer;
       timer.startTimer(150);
@@ -393,7 +388,7 @@ float guessHue(int bulbColor) {
   digitalWrite(GREEN_LEDPIN, LOW); 
   digitalWrite(BLUE_LEDPIN, HIGH);   
   // guessing hue via encoder
-  while (!encButton.isClicked()) {
+  while (!myButton.isClicked()) {
     _pos = myEncoder.read();
     _guess = _pos * 50;
     // bound hue values
@@ -458,7 +453,7 @@ float guessMidLine() {
   digitalWrite(GREEN_LEDPIN, LOW); 
   digitalWrite(BLUE_LEDPIN, HIGH);
 
-  while (!encButton.isClicked()) {
+  while (!myButton.isClicked()) {
     display.clearDisplay();
     display.drawLine(endpoints[0], endpoints[1], endpoints[2], endpoints[3], WHITE);
     display.display();
@@ -486,7 +481,7 @@ float guessTemp() {
   int maxTemp = 100;
   int tempRange = maxTemp - minTemp;
   int guess;
-  while (!encButton.isClicked()) {
+  while (!myButton.isClicked()) {
     guess = (myEncoder.read() / 4) + minTemp;
     if (guess < minTemp) {
       myEncoder.write(0);
@@ -504,8 +499,8 @@ float guessTemp() {
     display.setCursor(36,26);
     display.printf("%i %cF\n", guess, DEGREESYMBOL);
     display.setTextSize(1);
-    display.setCursor(3,54);
-    display.printf("PUSH KNOB TO PROCEED.\n");
+    display.setCursor(9,54);
+    display.printf("PUSH KNOB TO GUESS.\n");
     display.display();
     // calc hue between blue and red
     int tempHue = round((((guess - minTemp) * (65000.0 - 45000.0)) / (maxTemp - minTemp)) + 45000.0);
@@ -518,4 +513,5 @@ float guessTemp() {
 
 /* FIX:
  * timers
+ * +- accuracy
  */
