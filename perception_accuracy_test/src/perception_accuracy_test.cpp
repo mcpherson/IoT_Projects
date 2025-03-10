@@ -8,6 +8,7 @@
 #include "Particle.h"
 #include "Adafruit_SSD1306.h" 
 #include "Adafruit_GFX.h"
+#include "Adafruit_BME280.h"
 #include "Encoder.h"
 #include "Button.h"
 #include "hue.h"
@@ -30,6 +31,8 @@ const int PSHBTNPIN = D19;
 const int SERVOPIN = D16;
 const int OLED_RESET = -1;
 const int HUERANGE = 65350;
+const byte BMEADDRESS = 0x76;
+const byte DEGREESYMBOL = 248;
 
 Adafruit_SSD1306 display(OLED_RESET);
 Encoder myEncoder(D8, D9);
@@ -37,19 +40,22 @@ Button encButton(ENCBTNPIN);  // encoder button
 Button pshButton(PSHBTNPIN);   // standalone button
 Adafruit_NeoPixel pixel(PIXELCOUNT, SPI1, WS2812B);
 Servo accuracyGauge;
+Adafruit_BME280 bme;
 
-int tableNum;
+int tableNum = 0;
 int gameMode = 0;
 int servoStartPosition = 0;
+byte status;
 
-int selectTable();
-int selectGameMode();
+int selectTable(int tableNum);
+int selectGameMode(int gameMode);
 void startGame(int tableNum, int gameMode);
 void displayInstructions(int gameMode);
 void displayAccuracy(float _accuracy);
+void lightshow();
 float guessHue(int bulbColor);
 float guessMidLine();
-void lightshow();
+float guessTemp();
 
 void setup() {
   Serial.begin(4900);
@@ -59,18 +65,23 @@ void setup() {
   pinMode(RED_LEDPIN, OUTPUT);
   pinMode(GREEN_LEDPIN, OUTPUT);
 
-  // WiFi.on();
-  // WiFi.clearCredentials();
-  // WiFi.setCredentials("IoTNetwork");
+  WiFi.on();
+  WiFi.clearCredentials();
+  WiFi.setCredentials("IoTNetwork");
   
-  // WiFi.connect();
-  // while(WiFi.connecting()) {
-  //   Serial.printf(".");
-  // }
-  // Serial.printf("\n\n");
+  WiFi.connect();
+  while(WiFi.connecting()) {
+    Serial.printf(".");
+  }
+  Serial.printf("\n\n");
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
+
+  status = bme.begin(BMEADDRESS);
+  if (status == false) {
+    Serial.printf("BME280 at address 0x%02X failed to start", BMEADDRESS); 
+  }
   
   pixel.begin();
   pixel.setBrightness(100);
@@ -83,16 +94,16 @@ void setup() {
 // MAIN LOOP
 void loop() {
   accuracyGauge.write(servoStartPosition);
-  myEncoder.write(0);
-  tableNum = selectTable();
-  gameMode = selectGameMode();
+  // myEncoder.write(0);
+  tableNum = selectTable(tableNum);
+  gameMode = selectGameMode(gameMode);
   startGame(tableNum, gameMode);
 
   // delay(2147000000);
 }
 
-int selectTable() {
-  int tableNum = 0;
+int selectTable(int tableNum) {
+  myEncoder.write(tableNum * 4);
   // output values reversed? Input pullup because encoder is wired upside-down?
   digitalWrite(RED_LEDPIN, HIGH); 
   digitalWrite(GREEN_LEDPIN, HIGH); 
@@ -115,10 +126,10 @@ int selectTable() {
   return tableNum;
 }
 
-int selectGameMode() {
-  int gameMode;  
+int selectGameMode(int gameMode) {
+  myEncoder.write(gameMode * 4);  
   while (!encButton.isClicked()) {
-    gameMode = abs((myEncoder.read() / 4) % 3);
+    gameMode = abs((myEncoder.read() / 4) % 4);
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -138,6 +149,10 @@ int selectGameMode() {
         display.printf("Line Midpoint");
         break;
       case 2:
+        display.setCursor(30,32);
+        display.printf("Guess Temp\n");
+        break;
+      case 3:
         display.setCursor(33,32);
         display.printf("Lightshow\n");
         break;
@@ -189,7 +204,12 @@ void startGame(int tableNum, int gameMode) {
       delay(100);
       displayAccuracy(_accuracy);
       break;
-    case 2: // Lightshow
+    case 2: // Guess Temperature
+      _accuracy = guessTemp();
+      delay(100);
+      displayAccuracy(_accuracy);
+      break;
+    case 3: // Lightshow
       lightshow();
       break;
     default:
@@ -224,7 +244,17 @@ void displayInstructions(int gameMode) {
         display.setCursor(6,40);
         display.printf("PUSH AGAIN TO GUESS.\n");
         break;
-      case 2:  // lightshow
+      case 2:  // guess temp
+        display.setCursor(0,0);
+        display.printf("GUESS ROOM TEMP (%cF)\n", DEGREESYMBOL);
+        display.setCursor(14,10);
+        display.printf("USING RIGHT KNOB.\n");
+        display.setCursor(9,20);
+        display.printf("PUSH KNOB TO BEGIN.\n");
+        display.setCursor(6,40);
+        display.printf("PUSH AGAIN TO GUESS.\n");
+        break;
+      case 3:  // lightshow
         display.setTextSize(2);
         display.setCursor(5,0);
         display.printf("WHOA DUDE!\n");
@@ -423,7 +453,6 @@ float guessMidLine() {
   };
   float accuracy;
   float length = hypot(deltaEndpoints[0], deltaEndpoints[1]);
-  // float length = sqrt(deltaEndpoints[0]^2 + deltaEndpoints[1]^2);
 
   digitalWrite(RED_LEDPIN, HIGH); 
   digitalWrite(GREEN_LEDPIN, LOW); 
@@ -441,8 +470,6 @@ float guessMidLine() {
       myEncoder.write(deltaEndpoints[0]);
     }
 
-    // y = mx + b
-    // x = (y - b)/m
     guess[0] = (float)endpoints[0] + (float)pos;
     guess[1] = (slope * pos) + yInt;
 
@@ -450,11 +477,45 @@ float guessMidLine() {
     display.display();
   }
   accuracy = (((length / 2.0) - (abs((mid[0] + endpoints[0]) - guess[0]))) / (length / 2.0)) * 100.0;
-  Serial.printf("G: %0.2f, M: %0.2f, L: %0.2f \n", guess[0], mid[0], length);
+  return accuracy;
+}
+
+float guessTemp() {
+  int currTemp = ((9.0/5.0) * bme.readTemperature()) + 32.0;
+  int minTemp = 32;
+  int maxTemp = 100;
+  int tempRange = maxTemp - minTemp;
+  int guess;
+  while (!encButton.isClicked()) {
+    guess = (myEncoder.read() / 4) + minTemp;
+    if (guess < minTemp) {
+      myEncoder.write(0);
+      guess = minTemp;
+    }
+    if (guess > maxTemp) {
+      myEncoder.write((tempRange * 4)); 
+      guess = maxTemp;
+    }
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(32,0);
+    display.printf("Feels like");
+    display.setTextSize(2);
+    display.setCursor(36,26);
+    display.printf("%i %cF\n", guess, DEGREESYMBOL);
+    display.setTextSize(1);
+    display.setCursor(3,54);
+    display.printf("PUSH KNOB TO PROCEED.\n");
+    display.display();
+    // calc hue between blue and red
+    int tempHue = round((((guess - minTemp) * (65000.0 - 45000.0)) / (maxTemp - minTemp)) + 45000.0);
+    setHue(tableNum + 1, true, tempHue, 255, 255);
+    delay(100);
+  }
+  float accuracy = (((float)tempRange - abs(currTemp - guess)) / tempRange) * 100.0;
   return accuracy;
 }
 
 /* FIX:
  * timers
- * midpoint guess calc based on line equation - make sure startX is factored in - make guess float
  */
