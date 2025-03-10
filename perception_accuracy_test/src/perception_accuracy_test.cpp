@@ -1,18 +1,18 @@
 /* 
- * Midterm Project: Perception Accuracy Test (PAT)
+ * Midterm Project: Perception Accuracy Test
  * Description: An IoT device that allows its user to gauge their perception and estimation abilities (i.e. eyeballing) via small games/tests
  * Author: Marlon McPherson
  * Date: 4 MAR 2025
  */
 
 #include "Particle.h"
-#include "neopixel.h"
-#include "Adafruit_SSD1306.h"
+#include "Adafruit_SSD1306.h" 
 #include "Adafruit_GFX.h"
 #include "Encoder.h"
 #include "Button.h"
 #include "hue.h"
 #include "wemo.h"
+#include "neopixel.h"
 #include "IoTTimer.h"
 #include "hsv.h"
 #include "Wire.h"
@@ -21,7 +21,7 @@ SYSTEM_MODE(MANUAL);
 // SYSTEM_THREAD(ENABLED);
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
-const int PIXELCOUNT = 16;
+const int PIXELCOUNT = 8;
 const int BLUE_LEDPIN = D11;
 const int RED_LEDPIN = D12;
 const int GREEN_LEDPIN = D13;
@@ -34,7 +34,7 @@ const int HUERANGE = 65350;
 Adafruit_SSD1306 display(OLED_RESET);
 Encoder myEncoder(D8, D9);
 Button encButton(ENCBTNPIN);  // encoder button
-Button myButton(PSHBTNPIN);   // standalone button
+Button pshButton(PSHBTNPIN);   // standalone button
 Adafruit_NeoPixel pixel(PIXELCOUNT, SPI1, WS2812B);
 Servo accuracyGauge;
 
@@ -43,11 +43,13 @@ int gameMode = 0;
 int servoStartPosition = 0;
 
 int selectTable();
+int selectGameMode();
 void startGame(int tableNum, int gameMode);
 void displayInstructions(int gameMode);
 void displayAccuracy(float _accuracy);
 float guessHue(int bulbColor);
-
+float guessMidLine();
+void lightshow();
 
 void setup() {
   Serial.begin(4900);
@@ -57,19 +59,17 @@ void setup() {
   pinMode(RED_LEDPIN, OUTPUT);
   pinMode(GREEN_LEDPIN, OUTPUT);
 
-  WiFi.on();
-  WiFi.clearCredentials();
-  WiFi.setCredentials("IoTNetwork");
+  // WiFi.on();
+  // WiFi.clearCredentials();
+  // WiFi.setCredentials("IoTNetwork");
   
-  WiFi.connect();
-  while(WiFi.connecting()) {
-    Serial.printf(".");
-  }
-  Serial.printf("\n\n");
+  // WiFi.connect();
+  // while(WiFi.connecting()) {
+  //   Serial.printf(".");
+  // }
+  // Serial.printf("\n\n");
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  display.display(); // splash screen
-  delay(1000);
   display.clearDisplay();
   
   pixel.begin();
@@ -80,24 +80,26 @@ void setup() {
   
 }
 
+// MAIN LOOP
 void loop() {
-  // digitalWrite(BLUE_LEDPIN, LOW);
-  tableNum = selectTable(); // working
+  accuracyGauge.write(servoStartPosition);
+  myEncoder.write(0);
+  tableNum = selectTable();
+  gameMode = selectGameMode();
   startGame(tableNum, gameMode);
 
-  // delay(2140000000);
+  // delay(2147000000);
 }
 
 int selectTable() {
   int tableNum = 0;
-  digitalWrite(RED_LEDPIN, LOW); 
-  digitalWrite(GREEN_LEDPIN, LOW); 
-  digitalWrite(BLUE_LEDPIN, HIGH);   
+  // output values reversed? Input pullup because encoder is wired upside-down?
+  digitalWrite(RED_LEDPIN, HIGH); 
+  digitalWrite(GREEN_LEDPIN, HIGH); 
+  digitalWrite(BLUE_LEDPIN, LOW);   
   while (!encButton.isClicked()) {
+    tableNum = abs((myEncoder.read() / 4) % 5); 
     display.clearDisplay();
-    // guaranteed value 0-4
-    tableNum = abs((myEncoder.read() / 4) % 5);
-
     display.setTextSize(1);
     display.setTextColor(WHITE);
     display.setCursor(11,0);
@@ -113,6 +115,40 @@ int selectTable() {
   return tableNum;
 }
 
+int selectGameMode() {
+  int gameMode;  
+  while (!encButton.isClicked()) {
+    gameMode = abs((myEncoder.read() / 4) % 3);
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(11,0);
+    display.printf("TURN RIGHT KNOB TO\n");
+    display.setCursor(15,13);
+    display.printf("SELECT GAME MODE.\n");
+    display.setCursor(11,52);
+    display.printf("PUSH KNOB TO BEGIN.\n");
+    switch (gameMode) {
+      case 0: 
+        display.setCursor(33,32);
+        display.printf("Guess Hue\n");
+        break;
+      case 1: 
+        display.setCursor(23,32);
+        display.printf("Line Midpoint");
+        break;
+      case 2:
+        display.setCursor(33,32);
+        display.printf("Lightshow\n");
+        break;
+      default:
+        break;
+    }
+    display.display();
+  }
+  return gameMode;
+}
+
 void startGame(int tableNum, int gameMode) {
   int _tableNum = tableNum;
   int _gameMode = gameMode;
@@ -120,6 +156,7 @@ void startGame(int tableNum, int gameMode) {
   int _bulbColor = random(0, HUERANGE);
   int _bulbNum = _tableNum + 1; // hue bulbs indexed from 1
   float _accuracy;
+  myEncoder.write(0);
   
   // Turn off all hue bulbs and wemos except active table. 
   for (int i=1; i<6; i++) {  
@@ -138,19 +175,26 @@ void startGame(int tableNum, int gameMode) {
     }
   }
   
-  display.clearDisplay();
   // Display game instructions and begin specified game mode.
+  display.clearDisplay();
   displayInstructions(_gameMode);
   switch (_gameMode) {
-    case 0:
+    case 0: // Guess Hue
       _accuracy = guessHue(_bulbColor);
       delay(100);
       displayAccuracy(_accuracy);
       break;
+    case 1: // Guess Line Midpoint
+      _accuracy = guessMidLine();
+      delay(100);
+      displayAccuracy(_accuracy);
+      break;
+    case 2: // Lightshow
+      lightshow();
+      break;
     default:
       break;
   }
-
 }
 
 void displayInstructions(int gameMode) {
@@ -160,7 +204,7 @@ void displayInstructions(int gameMode) {
   digitalWrite(BLUE_LEDPIN, LOW);   
   while (!encButton.isClicked()){
     switch (_gameMode) {
-      case 0:   // guess hue bulb color
+      case 0:   // guess hue
         display.setCursor(14,0);
         display.printf("REPLICATE CURRENT\n");
         display.setCursor(14,10);
@@ -170,50 +214,134 @@ void displayInstructions(int gameMode) {
         display.setCursor(9,40);
         display.printf("PUSH KNOB TO BEGIN.\n");
         break;
+      case 1:   // line midpoint
+        display.setCursor(8,0);
+        display.printf("GUESS LINE MIDPOINT\n");
+        display.setCursor(14,10);
+        display.printf("USING RIGHT KNOB.\n");
+        display.setCursor(9,20);
+        display.printf("PUSH KNOB TO BEGIN.\n");
+        display.setCursor(6,40);
+        display.printf("PUSH AGAIN TO GUESS.\n");
+        break;
+      case 2:  // lightshow
+        display.setTextSize(2);
+        display.setCursor(5,0);
+        display.printf("WHOA DUDE!\n");
+        display.setTextSize(1);
+        display.setCursor(20,40);
+        display.printf("PUSH RIGHT KNOB\n");
+        display.setCursor(9,50);
+        display.printf("TO END THE MADNESS.\n");
+        display.display();
+        return; // skip to execution, no need to read first
       default:
         break;
     }
     display.display();
   }
-  // pick random hue to start guessing from
-  // int currHue = getHue(tableNum + 1);
-  int nextHue = random(0, HUERANGE);
- 
-  setHue(tableNum + 1, true, nextHue, 255, 255);
 }
 
 void displayAccuracy(float accuracy) {
   display.clearDisplay();
   accuracyGauge.write(round(accuracy));
+  display.setTextSize(2);
+  display.setCursor(13,0);
+  display.printf("ACCURACY:\n");
+  display.setCursor(36,26);
+  display.printf("%0.1f%%\n", accuracy);
+  display.setTextSize(1);
+  display.setCursor(3,54);
+  display.printf("PUSH KNOB TO PROCEED.\n");
+  display.display();
   while (!encButton.isClicked()) {
-    for (int i=0; i<3; i++) {
-      if (i == 0) {
-        digitalWrite(RED_LEDPIN, HIGH); 
-        digitalWrite(GREEN_LEDPIN, LOW); 
-        digitalWrite(BLUE_LEDPIN, LOW);
-        delay(100);
-      }
-      else if (i == 1) {
-        digitalWrite(RED_LEDPIN, LOW); 
-        digitalWrite(GREEN_LEDPIN, HIGH); 
-        digitalWrite(BLUE_LEDPIN, LOW);
-        delay(100);
-      }
-      else {
-        digitalWrite(RED_LEDPIN, LOW); 
-        digitalWrite(GREEN_LEDPIN, LOW); 
-        digitalWrite(BLUE_LEDPIN, HIGH);
-        delay(100);
+    // lightshow
+    if (accuracy > 95.0) {
+      // rainbow knob
+      for (int i=0; i<6; i++) {
+        IoTTimer timer;
+        timer.startTimer(200);
+        while (!timer.isTimerReady()) {
+          if (encButton.isClicked()) {
+            return;
+          }
+          switch (i) {
+            case 0:
+              digitalWrite(RED_LEDPIN, LOW); 
+              digitalWrite(GREEN_LEDPIN, HIGH); 
+              digitalWrite(BLUE_LEDPIN, HIGH);
+              break;
+            case 1: 
+              digitalWrite(GREEN_LEDPIN, LOW); 
+              break;
+            case 2:
+              digitalWrite(RED_LEDPIN, HIGH);
+              break;
+            case 3:
+              digitalWrite(BLUE_LEDPIN, LOW);
+              break;
+            case 4:
+              digitalWrite(GREEN_LEDPIN, HIGH);
+              break;
+            case 5:
+              digitalWrite(RED_LEDPIN, LOW);
+              break;
+            default:
+              break;
+          }
+        }
       }
     }
-    if (accuracy > 0.9) {  //FIX
-      display.setTextSize(2);
-      display.setCursor(12,0);
-      display.printf("ACCURACY:\n");
-      display.setCursor(36,40);
-      display.printf("%0.1f%%\n", accuracy);
-      display.display();
+    else {
+      digitalWrite(RED_LEDPIN, LOW); 
+      digitalWrite(GREEN_LEDPIN, LOW); 
+      digitalWrite(BLUE_LEDPIN, HIGH);
     }
+  }
+}
+
+void lightshow() { // automatic mode
+  int startColors[6] {0, 11000, 22000, 33000, 44000, 55000};
+  // turn on wemos
+  for (int i=0; i<5; i++) {
+    wemoWrite(i, HIGH);
+    delay(100);
+  }
+  // lightshow
+  while(!encButton.isClicked()) {
+    for (int i=0; i<6; i++) {
+      IoTTimer timer;
+      timer.startTimer(150);
+      while (!timer.isTimerReady()) {
+        setHue(i+1, true, startColors[i], 255, 255);
+        startColors[i] == 65000 ? startColors[i] = 0 : startColors[i] += 1000;
+        // rainbow knob
+        switch (i) {
+          case 0:
+            digitalWrite(RED_LEDPIN, LOW); 
+            digitalWrite(GREEN_LEDPIN, HIGH); 
+            digitalWrite(BLUE_LEDPIN, HIGH);
+            break;
+          case 1: 
+            digitalWrite(GREEN_LEDPIN, LOW); 
+            break;
+          case 2:
+            digitalWrite(RED_LEDPIN, HIGH);
+            break;
+          case 3:
+            digitalWrite(BLUE_LEDPIN, LOW);
+            break;
+          case 4:
+            digitalWrite(GREEN_LEDPIN, HIGH);
+            break;
+          case 5:
+            digitalWrite(RED_LEDPIN, LOW);
+            break;
+          default:
+            break;
+        }
+      }
+    } 
   }
 }
 
@@ -223,9 +351,17 @@ float guessHue(int bulbColor) {
   int _bulbColor = bulbColor; // is this needed?
   int _delta;
   float _accuracy;
-  digitalWrite(RED_LEDPIN, LOW); 
-  digitalWrite(GREEN_LEDPIN, HIGH); 
-  digitalWrite(BLUE_LEDPIN, LOW);   
+
+  // pick a different hue to start guessing from
+  int nextHue;
+  _bulbColor > HUERANGE/2
+    ? nextHue = random(_bulbColor - HUERANGE/2, (_bulbColor - HUERANGE/2) + 2000) 
+    : nextHue = random((_bulbColor + HUERANGE/2) - 2000, _bulbColor - HUERANGE/2);
+  setHue(tableNum + 1, true, nextHue, 255, 255);
+
+  digitalWrite(RED_LEDPIN, HIGH); 
+  digitalWrite(GREEN_LEDPIN, LOW); 
+  digitalWrite(BLUE_LEDPIN, HIGH);   
   // guessing hue via encoder
   while (!encButton.isClicked()) {
     _pos = myEncoder.read();
@@ -263,3 +399,62 @@ float guessHue(int bulbColor) {
   Serial.printf("delta: %i, accuracy: %0.3f, converted: %0.3f\n", _delta, _accuracy, _newAccuracy);
   return _newAccuracy * 100; // convert to percentage
 }
+
+float guessMidLine() {
+  int endpoints[4] { // (x1, y1) (x2, y2)
+    random(1, 15),
+    random(1, 63),
+    random(113, 127),
+    random(1, 63)
+  };
+  int deltaEndpoints[2] {
+    endpoints[2] - endpoints[0],
+    endpoints[3] - endpoints[1]
+  };
+  float mid[2] { 
+    deltaEndpoints[0] / 2.0,
+    deltaEndpoints[1] / 2.0
+  };
+  float slope = ((float)deltaEndpoints[1]) / (deltaEndpoints[0]);
+  float yInt = endpoints[1] - (slope * endpoints[0]);
+  float guess[2] {
+    (float)endpoints[0],
+    (float)endpoints[1]
+  };
+  float accuracy;
+  float length = hypot(deltaEndpoints[0], deltaEndpoints[1]);
+  // float length = sqrt(deltaEndpoints[0]^2 + deltaEndpoints[1]^2);
+
+  digitalWrite(RED_LEDPIN, HIGH); 
+  digitalWrite(GREEN_LEDPIN, LOW); 
+  digitalWrite(BLUE_LEDPIN, HIGH);
+
+  while (!encButton.isClicked()) {
+    display.clearDisplay();
+    display.drawLine(endpoints[0], endpoints[1], endpoints[2], endpoints[3], WHITE);
+    display.display();
+    int pos = myEncoder.read() / 4;
+    if (pos < 0) {
+      myEncoder.write(0);
+    }
+    if (pos > deltaEndpoints[0]) {
+      myEncoder.write(deltaEndpoints[0]);
+    }
+
+    // y = mx + b
+    // x = (y - b)/m
+    guess[0] = (float)endpoints[0] + (float)pos;
+    guess[1] = (slope * pos) + yInt;
+
+    display.drawLine(guess[0], guess[1]-5, guess[0], guess[1]+5, WHITE);
+    display.display();
+  }
+  accuracy = (((length / 2.0) - (abs((mid[0] + endpoints[0]) - guess[0]))) / (length / 2.0)) * 100.0;
+  Serial.printf("G: %0.2f, M: %0.2f, L: %0.2f \n", guess[0], mid[0], length);
+  return accuracy;
+}
+
+/* FIX:
+ * timers
+ * midpoint guess calc based on line equation - make sure startX is factored in - make guess float
+ */
