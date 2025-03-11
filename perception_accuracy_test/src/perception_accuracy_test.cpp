@@ -104,7 +104,7 @@ int selectTable(int tableNum) {
   digitalWrite(GREEN_LEDPIN, HIGH); 
   digitalWrite(BLUE_LEDPIN, LOW);   
   while (!myButton.isClicked()) {
-    tableNum = abs(((myEncoder.read() / 4) + 4) % 5); 
+    tableNum = abs(((myEncoder.read() / 4) + 5) % 5); 
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -280,7 +280,6 @@ void displayAccuracy(float accuracy) {
   display.printf("PUSH BUTTON TO END\n");
   display.display();
   while (!myButton.isClicked()) {
-    // lightshow
     if (accuracy > 95.0) {
       // rainbow knob
       for (int i=0; i<6; i++) {
