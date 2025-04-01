@@ -63,15 +63,15 @@ void setup() {
   pinMode(RED_LEDPIN, OUTPUT);
   pinMode(GREEN_LEDPIN, OUTPUT);
 
-  WiFi.on();
-  WiFi.clearCredentials();
-  WiFi.setCredentials("IoTNetwork");
+  // WiFi.on();
+  // WiFi.clearCredentials();
+  // WiFi.setCredentials("IoTNetwork");
   
-  WiFi.connect();
-  while(WiFi.connecting()) {
-    Serial.printf(".");
-  }
-  Serial.printf("\n\n");
+  // WiFi.connect();
+  // while(WiFi.connecting()) {
+  //   Serial.printf(".");
+  // }
+  // Serial.printf("\n\n");
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();

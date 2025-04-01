@@ -1,5 +1,9 @@
 # perception_accuracy_test
 
+This simple IoT device allows a user to test their perception and estimation skills (i.e. eyeballing) via a series of small games.
+
+For more information, check out the [project details on Hackster.io](https://www.hackster.io/marloncmcpherson/iot-perception-accuracy-test-8b02b1).
+
 This firmware project was created using [Particle Developer Tools](https://www.particle.io/developer-tools/) and is compatible with all [Particle Devices](https://www.particle.io/devices/).
 
 Feel free to replace this README.md file with your own content, or keep it for reference.
